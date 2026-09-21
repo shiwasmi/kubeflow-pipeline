@@ -1,0 +1,409 @@
+# PIPELINE DEFINITION
+# Name: housing-price-prediction-pipeline
+# Description: End-to-end housing price prediction pipeline
+components:
+  comp-download-dataset:
+    executorLabel: exec-download-dataset
+    outputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-evaluate-models:
+    executorLabel: exec-evaluate-models
+    inputDefinitions:
+      artifacts:
+        models:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        test_set:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-feature-engineering:
+    executorLabel: exec-feature-engineering
+    inputDefinitions:
+      artifacts:
+        validated:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        features:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-split-data:
+    executorLabel: exec-split-data
+    inputDefinitions:
+      artifacts:
+        features:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        test_set:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        train_set:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-train-models:
+    executorLabel: exec-train-models
+    inputDefinitions:
+      artifacts:
+        train_set:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        models:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-validate-data:
+    executorLabel: exec-validate-data
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        validated:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-download-dataset:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - download_dataset
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef download_dataset(dataset: dsl.OutputPath(\"Dataset\")):  # artifact\
+          \ type\n    import requests, pandas as pd, io, numpy as np\n\n    url =\
+          \ \"https://raw.githubusercontent.com/dsrscientist/dataset1/master/housing_prices.csv\"\
+          \n    print(\"Downloading dataset from:\", url)\n\n    try:\n        response\
+          \ = requests.get(url, timeout=60)\n        response.raise_for_status()\n\
+          \        df = pd.read_csv(io.StringIO(response.text))\n    except Exception\
+          \ as e:\n        print(\"WARNING: Could not download dataset, using synthetic\
+          \ data:\", e)\n        np.random.seed(42)\n        n = 500\n        df =\
+          \ pd.DataFrame({\n            \"price\": np.random.randint(100000, 1000000,\
+          \ n),\n            \"area\": np.random.randint(1000, 10000, n),\n      \
+          \      \"bedrooms\": np.random.randint(1, 6, n),\n            \"bathrooms\"\
+          : np.random.randint(1, 4, n),\n            \"stories\": np.random.randint(1,\
+          \ 4, n),\n            \"mainroad\": np.random.choice([\"yes\", \"no\"],\
+          \ n),\n            \"guestroom\": np.random.choice([\"yes\", \"no\"], n),\n\
+          \            \"basement\": np.random.choice([\"yes\", \"no\"], n),\n   \
+          \         \"hotwaterheating\": np.random.choice([\"yes\", \"no\"], n),\n\
+          \            \"airconditioning\": np.random.choice([\"yes\", \"no\"], n),\n\
+          \            \"parking\": np.random.randint(0, 4, n),\n            \"prefarea\"\
+          : np.random.choice([\"yes\", \"no\"], n),\n            \"furnishingstatus\"\
+          : np.random.choice(\n                [\"furnished\", \"semi-furnished\"\
+          , \"unfurnished\"], n\n            ),\n        })\n\n    df.to_csv(dataset,\
+          \ index=False)\n    print(\"Dataset ready:\", df.shape)\n\n"
+        image: ml-pipeline-image:1.0
+    exec-evaluate-models:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_models
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_models(test_set: dsl.InputPath(\"Dataset\"),\n     \
+          \               models: dsl.InputPath(\"Dataset\")):\n    import os, pandas\
+          \ as pd, joblib, math\n    from sklearn.metrics import mean_squared_error,\
+          \ r2_score\n\n    df = pd.read_csv(test_set)\n    X, y = df.drop(\"price\"\
+          , axis=1), df[\"price\"]\n\n    results = {}\n    for file in os.listdir(models):\n\
+          \        if file.endswith(\".joblib\"):\n            name = file.replace(\"\
+          .joblib\", \"\")\n            model = joblib.load(os.path.join(models, file))\n\
+          \            pred = model.predict(X)\n            rmse = math.sqrt(mean_squared_error(y,\
+          \ pred))\n            r2 = r2_score(y, pred)\n            results[name]\
+          \ = r2\n            print(f\"{name}: RMSE={rmse:.2f}, R2={r2:.4f}\")\n\n\
+          \    best = max(results, key=results.get)\n    print(f\"Best model: {best}\
+          \ (R2={results[best]:.4f})\")\n\n"
+        image: ml-pipeline-image:1.0
+    exec-feature-engineering:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - feature_engineering
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef feature_engineering(validated: dsl.InputPath(\"Dataset\"),\n\
+          \                        features: dsl.OutputPath(\"Dataset\")):\n    import\
+          \ pandas as pd\n    df = pd.read_csv(validated)\n    print(\"Starting feature\
+          \ engineering...\")\n\n    df = pd.get_dummies(df)\n    bool_cols = df.select_dtypes(include=\"\
+          bool\").columns\n    df[bool_cols] = df[bool_cols].astype(int)\n\n    df.to_csv(features,\
+          \ index=False)\n    print(\"Feature engineering complete. Features:\", df.shape[1])\n\
+          \n"
+        image: ml-pipeline-image:1.0
+    exec-split-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - split_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef split_data(features: dsl.InputPath(\"Dataset\"),\n          \
+          \     train_set: dsl.OutputPath(\"Dataset\"),\n               test_set:\
+          \ dsl.OutputPath(\"Dataset\")):\n    import pandas as pd\n    from sklearn.model_selection\
+          \ import train_test_split\n\n    df = pd.read_csv(features)\n    train,\
+          \ test = train_test_split(df, test_size=0.2, random_state=42)\n\n    train.to_csv(train_set,\
+          \ index=False)\n    test.to_csv(test_set, index=False)\n\n    print(\"Split\
+          \ complete. Train:\", len(train), \"Test:\", len(test))\n\n"
+        image: ml-pipeline-image:1.0
+    exec-train-models:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_models
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_models(train_set: dsl.InputPath(\"Dataset\"),\n       \
+          \          models: dsl.OutputPath(\"Dataset\")):\n    import os, pandas\
+          \ as pd, joblib\n    from sklearn.linear_model import LinearRegression\n\
+          \    from sklearn.ensemble import RandomForestRegressor\n    from sklearn.tree\
+          \ import DecisionTreeRegressor\n\n    df = pd.read_csv(train_set)\n    if\
+          \ \"price\" not in df.columns:\n        raise ValueError(\"Column 'price'\
+          \ not found. Columns: \" + str(df.columns.tolist()))\n\n    X, y = df.drop(\"\
+          price\", axis=1), df[\"price\"]\n\n    os.makedirs(models, exist_ok=True)\n\
+          \    joblib.dump(LinearRegression().fit(X, y), os.path.join(models, \"linear.joblib\"\
+          ))\n    joblib.dump(RandomForestRegressor(n_estimators=100, random_state=42).fit(X,\
+          \ y),\n                os.path.join(models, \"rf.joblib\"))\n    joblib.dump(DecisionTreeRegressor(random_state=42).fit(X,\
+          \ y),\n                os.path.join(models, \"dt.joblib\"))\n\n    print(\"\
+          Models trained and saved to\", models)\n\n"
+        image: ml-pipeline-image:1.0
+    exec-validate-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - validate_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef validate_data(dataset: dsl.InputPath(\"Dataset\"),\n        \
+          \          validated: dsl.OutputPath(\"Dataset\")):\n    import pandas as\
+          \ pd\n    df = pd.read_csv(dataset)\n    print(\"Validating dataset... Shape:\"\
+          , df.shape)\n\n    df = df.fillna(0).drop_duplicates()\n    df.to_csv(validated,\
+          \ index=False)\n    print(\"Validation complete. Shape:\", df.shape)\n\n"
+        image: ml-pipeline-image:1.0
+pipelineInfo:
+  description: End-to-end housing price prediction pipeline
+  name: housing-price-prediction-pipeline
+root:
+  dag:
+    tasks:
+      download-dataset:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-download-dataset
+        taskInfo:
+          name: download-dataset
+      evaluate-models:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate-models
+        dependentTasks:
+        - split-data
+        - train-models
+        inputs:
+          artifacts:
+            models:
+              taskOutputArtifact:
+                outputArtifactKey: models
+                producerTask: train-models
+            test_set:
+              taskOutputArtifact:
+                outputArtifactKey: test_set
+                producerTask: split-data
+        taskInfo:
+          name: evaluate-models
+      feature-engineering:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-feature-engineering
+        dependentTasks:
+        - validate-data
+        inputs:
+          artifacts:
+            validated:
+              taskOutputArtifact:
+                outputArtifactKey: validated
+                producerTask: validate-data
+        taskInfo:
+          name: feature-engineering
+      split-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-split-data
+        dependentTasks:
+        - feature-engineering
+        inputs:
+          artifacts:
+            features:
+              taskOutputArtifact:
+                outputArtifactKey: features
+                producerTask: feature-engineering
+        taskInfo:
+          name: split-data
+      train-models:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-models
+        dependentTasks:
+        - split-data
+        inputs:
+          artifacts:
+            train_set:
+              taskOutputArtifact:
+                outputArtifactKey: train_set
+                producerTask: split-data
+        taskInfo:
+          name: train-models
+      validate-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-validate-data
+        dependentTasks:
+        - download-dataset
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: dataset
+                producerTask: download-dataset
+        taskInfo:
+          name: validate-data
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.0

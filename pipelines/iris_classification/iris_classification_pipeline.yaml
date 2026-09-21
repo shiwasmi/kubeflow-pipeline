@@ -1,0 +1,170 @@
+# PIPELINE DEFINITION
+# Name: iris-classification-pipeline
+# Description: End-to-end Iris classification: load data -> train model -> predict
+components:
+  comp-load-data:
+    executorLabel: exec-load-data
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-predict:
+    executorLabel: exec-predict
+    inputDefinitions:
+      parameters:
+        status:
+          parameterType: STRING
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      parameters:
+        status:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-load-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - load_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef load_data() -> str:\n    from sklearn.datasets import load_iris\n\
+          \    import pandas as pd\n\n    data = load_iris()\n    df = pd.DataFrame(data.data,\
+          \ columns=data.feature_names)\n\n    print(\"Dataset loaded successfully\"\
+          )\n    print(f\"Shape: {df.shape}\")\n    print(df.head())\n\n    return\
+          \ \"data_loaded\"\n\n"
+        image: ml-pipeline-image:1.0
+    exec-predict:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - predict
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef predict(status: str):\n    from sklearn.datasets import load_iris\n\
+          \    from sklearn.linear_model import LogisticRegression\n\n    data = load_iris()\n\
+          \    X = data.data\n    y = data.target\n\n    model = LogisticRegression(max_iter=200)\n\
+          \    model.fit(X, y)\n\n    sample = X[0].reshape(1, -1)\n    prediction\
+          \ = model.predict(sample)\n    predicted_class = data.target_names[prediction[0]]\n\
+          \n    print(f\"Sample input: {X[0]}\")\n    print(f\"Predicted class index:\
+          \ {prediction[0]}\")\n    print(f\"Predicted class name: {predicted_class}\"\
+          )\n\n"
+        image: ml-pipeline-image:1.0
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(status: str) -> str:\n    from sklearn.datasets import\
+          \ load_iris\n    from sklearn.linear_model import LogisticRegression\n\n\
+          \    data = load_iris()\n    X = data.data\n    y = data.target\n\n    model\
+          \ = LogisticRegression(max_iter=200)\n    model.fit(X, y)\n\n    print(\"\
+          Model trained successfully\")\n    print(f\"Classes: {list(data.target_names)}\"\
+          )\n\n    return \"model_trained\"\n\n"
+        image: ml-pipeline-image:1.0
+pipelineInfo:
+  description: 'End-to-end Iris classification: load data -> train model -> predict'
+  name: iris-classification-pipeline
+root:
+  dag:
+    tasks:
+      load-data:
+        cachingOptions: {}
+        componentRef:
+          name: comp-load-data
+        taskInfo:
+          name: load-data
+      predict:
+        cachingOptions: {}
+        componentRef:
+          name: comp-predict
+        dependentTasks:
+        - train-model
+        inputs:
+          parameters:
+            status:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: train-model
+        taskInfo:
+          name: predict
+      train-model:
+        cachingOptions: {}
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - load-data
+        inputs:
+          parameters:
+            status:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: load-data
+        taskInfo:
+          name: train-model
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.0
